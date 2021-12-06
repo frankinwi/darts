@@ -73,20 +73,26 @@ class Architect(object):
     model_new.load_state_dict(model_dict)
     return model_new.cuda()
 
+  # 论文中的公式(8)
   def _hessian_vector_product(self, vector, input, target, r=1e-2):
+    # R = 0.01/L2norm(dL(w',a) / dw')
     R = r / _concat(vector).norm()
+    # 计算positive梯度
     for p, v in zip(self.model.parameters(), vector):
       p.data.add_(R, v)
     loss = self.model._loss(input, target)
     grads_p = torch.autograd.grad(loss, self.model.arch_parameters())
 
+    # 计算negative梯度
     for p, v in zip(self.model.parameters(), vector):
       p.data.sub_(2*R, v)
     loss = self.model._loss(input, target)
     grads_n = torch.autograd.grad(loss, self.model.arch_parameters())
 
+    # 由于使用add_和sub_原位计算,这里需要恢复parameters为初始状态
     for p, v in zip(self.model.parameters(), vector):
       p.data.add_(R, v)
 
+    # 计算公式(8)的右边
     return [(x-y).div_(2*R) for x, y in zip(grads_p, grads_n)]
 
